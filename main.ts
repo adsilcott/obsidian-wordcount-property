@@ -1,4 +1,4 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import { App, Editor, editorEditorField, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
 
 // Remember to rename these classes and interfaces!
 
@@ -15,6 +15,17 @@ export default class MyPlugin extends Plugin {
 
 	async onload() {
 		await this.loadSettings();
+
+		this.registerEvent(this.app.vault.on('modify', async () => {
+			const file = this.app.workspace.getActiveFile();
+			if (!file) return;
+			let text = await this.app.vault.read(file);
+			this.app.fileManager.processFrontMatter(file, async frontmatter => {
+				if ('word_count' in frontmatter) {
+					frontmatter['word_count'] = text.replace(/^---.*?\n---\n/s, "").split(/\b\w+\b/g).length - 1;
+				}
+			})
+		}))
 
 		// This creates an icon in the left ribbon.
 		const ribbonIconEl = this.addRibbonIcon('dice', 'Sample Plugin', (evt: MouseEvent) => {

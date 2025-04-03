@@ -11,35 +11,38 @@ const DEFAULT_SETTINGS: WordCountPropertySettings = {
 export default class WordCountPropertyPlugin extends Plugin {
 	settings: WordCountPropertySettings;
 
-	private isRemoving = false;
-	private activeLeaf: any;
+	private previousFile: TFile | null;
+
+	async UpdateCount(file:TFile) {
+		let fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
+		if (fm && this.settings.propertyName in fm)
+		{
+			let text = await this.app.vault.read(file);
+			//Since we already know the file has frontmatter, we can simply remove everything between the first two ---
+			let count = text.replace(/---[\S\s]*?---/, "").split(/\b\w+\b/g).length - 1; ///^---.*?\n---\n/s
+			this.app.fileManager.processFrontMatter(file, async (frontmatter) => {frontmatter[this.settings.propertyName] = count});
+		}
+	}
 
 	async onload() {
 		await this.loadSettings();
 
 		this.app.workspace.onLayoutReady(() => {
 
+			//On leaf change check if the last file was valid
 			this.registerEvent(this.app.workspace.on('active-leaf-change', async (leaf) => {
-				const file = this.app.workspace.getActiveFile();
-				if (!file) return;
-				let fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
-				if (fm && this.settings.propertyName in fm)
-				{
-					let text = await this.app.vault.read(file);
-					let count = text.replace(/---[\S\s]*?---/, "").split(/\b\w+\b/g).length - 1; ///^---.*?\n---\n/s
-					this.app.fileManager.processFrontMatter(file, async (frontmatter) => {frontmatter[this.settings.propertyName] = count});
-				}
+				const file = this.previousFile;
+				this.previousFile = this.app.workspace.getActiveFile();
+				if (file) this.UpdateCount(file);
 			}))
 	
-			// This adds an editor command that can perform some operation on the current editor instance
+			// Command to manually update word count
 			this.addCommand({
-				id: 'remove-tracked-property',
-				name: 'Remove Tracked Property',
+				id: 'update-word-count',
+				name: 'Update Word Count',
 				editorCallback: (editor: Editor, view: MarkdownView) => {
-					this.isRemoving = true;
 					const file = this.app.workspace.getActiveFile();
-					if (!file) return;
-					this.app.fileManager.processFrontMatter(file, frontmatter => {delete frontmatter[this.settings.propertyName]});
+					if (file) this.UpdateCount(file);
 				}
 			});
 			
